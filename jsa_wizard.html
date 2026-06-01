@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSA 作業安全分析精靈</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface2: #f0efe9;
+  --border: #dddbd2;
+  --accent: #1a3a5c;
+  --accent-light: #2a5a8c;
+  --accent2: #c45b2a;
+  --success: #2a7a4a;
+  --warning: #c47a1a;
+  --danger: #c42a2a;
+  --text: #1a1a1a;
+  --text-dim: #5a5a5a;
+  --text-dimmer: #9a9a9a;
+  --yellow: #f5c842;
+  --tag-bg: #1a3a5c;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Noto Sans TC', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+header {
+  background: var(--accent);
+  padding: 0 40px;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+.header-badge {
+  background: var(--yellow);
+  color: var(--accent);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.header-main {
+  padding: 14px 24px;
+  flex: 1;
+}
+.header-main h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+.header-main p {
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 2px;
+  font-family: 'Space Mono', monospace;
+}
+
+/* ── Progress ── */
+.progress-wrap {
+  background: var(--accent);
+  border-bottom: 3px solid var(--yellow);
+  padding: 0 40px;
+  display: flex;
+  overflow-x: auto;
+}
+.prog-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -3px;
+  white-space: nowrap;
+  cursor: default;
+  transition: all 0.2s;
+}
+.prog-step.active { color: var(--yellow); border-bottom-color: var(--yellow); }
+.prog-step.done { color: rgba(255,255,255,0.7); }
+.prog-num {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+.prog-step.active .prog-num { background: var(--yellow); color: var(--accent); }
+.prog-step.done .prog-num { background: rgba(255,255,255,0.3); color: #fff; }
+
+/* ── Layout ── */
+main { max-width: 1000px; margin: 36px auto; padding: 0 24px 60px; }
+
+.step-panel { display: none; animation: fadeUp 0.25s ease; }
+.step-panel.active { display: block; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+/* ── Step header ── */
+.step-hd { margin-bottom: 24px; display: flex; align-items: flex-start; gap: 20px; }
+.step-hd-num {
+  font-family: 'Space Mono', monospace;
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--border);
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: -4px;
+}
+.step-hd-text h2 { font-size: 22px; font-weight: 900; color: var(--accent); margin-bottom: 6px; }
+.step-hd-text p { font-size: 13px; color: var(--text-dim); line-height: 1.7; }
+
+/* ── Card ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.card-head {
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.card-head .ch-tag {
+  background: var(--yellow);
+  color: var(--accent);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-family: 'Space Mono', monospace;
+}
+.card-body { padding: 20px; }
+
+/* ── Form ── */
+label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
+input[type="text"], textarea, select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  font-family: 'Noto Sans TC', sans-serif;
+  font-size: 14px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input[type="text"]:focus, textarea:focus, select:focus { border-color: var(--accent); background: #fff; }
+textarea { resize: vertical; min-height: 70px; line-height: 1.6; }
+select { cursor: pointer; }
+.row { display: flex; gap: 14px; }
+.row > * { flex: 1; }
+.mb { margin-bottom: 14px; }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 20px; border-radius: 3px;
+  font-family: 'Noto Sans TC', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: none; transition: all 0.15s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-light); }
+.btn-accent2 { background: var(--accent2); color: #fff; }
+.btn-accent2:hover { background: #d46b3a; }
+.btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-success { background: var(--success); color: #fff; font-weight: 700; padding: 11px 28px; font-size: 14px; }
+.btn-success:hover { background: #3a9a5c; }
+.btn-del { background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 5px 10px; font-size: 11px; border-radius: 3px; cursor: pointer; }
+.btn-del:hover { background: #fff0f0; }
+.btn-add {
+  width: 100%; background: transparent; border: 1px dashed var(--accent);
+  color: var(--accent); padding: 9px; border-radius: 3px;
+  font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: all 0.15s;
+}
+.btn-add:hover { background: rgba(26,58,92,0.05); }
+
+.action-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 28px; padding-top: 20px; border-top: 2px solid var(--border);
+}
+
+/* ── Template grid ── */
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.tpl-card {
+  background: var(--surface2);
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  padding: 14px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+.tpl-card:hover { border-color: var(--accent); background: rgba(26,58,92,0.04); }
+.tpl-card.selected { border-color: var(--accent); background: rgba(26,58,92,0.08); }
+.tpl-card .ti { font-size: 24px; margin-bottom: 7px; }
+.tpl-card .tn { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+.tpl-card .tc { font-size: 10px; color: var(--text-dimmer); font-family: 'Space Mono', monospace; }
+
+.divider {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--text-dimmer); font-size: 11px; margin: 16px 0;
+}
+.divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* ── Step items (作業拆解) ── */
+.work-step-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin-bottom: 8px;
+}
+.wsn {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-family: 'Space Mono', monospace; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 8px;
+}
+.ws-inputs { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.ws-content-list { margin-left: 10px; }
+.ws-content-item {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
+}
+.wsc-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent2); flex-shrink: 0;
+}
+.ws-add-content {
+  background: transparent; border: none; color: var(--accent-light);
+  font-size: 11px; cursor: pointer; padding: 3px 0; text-align: left;
+  display: flex; align-items: center; gap: 4px;
+}
+.ws-add-content:hover { color: var(--accent); }
+
+/* ── Hazard items ── */
+.hazard-item {
+  background: var(--surface2);
+  border-left: 3px solid var(--accent2);
+  border-radius: 0 4px 4px 0;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.hi-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.hi-num {
+  background: var(--accent2); color: #fff;
+  font-family: 'Space Mono', monospace; font-size: 10px;
+  padding: 2px 7px; border-radius: 2px; flex-shrink: 0;
+}
+
+/* ── Risk ── */
+.risk-pill {
+  display: inline-block; padding: 3px 10px; border-radius: 2px;
+  font-size: 11px; font-weight: 700;
+}
+.r-low { background: #e8f5ed; color: #2a7a4a; border: 1px solid #a0d0b0; }
+.r-med { background: #fef3e0; color: #c47a1a; border: 1px solid #f0c070; }
+.r-high { background: #fce8e0; color: #c45b2a; border: 1px solid #e0a090; }
+.r-critical { background: #fce0e0; color: #c42a2a; border: 1px solid #e09090; }
+
+.risk-calc {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; background: #fff;
+  border: 1px solid var(--border); border-radius: 3px; margin-top: 10px;
+}
+.risk-score-big {
+  font-family: 'Space Mono', monospace; font-size: 28px; font-weight: 700;
+  min-width: 36px; text-align: center;
+}
+
+/* ── Review table ── */
+.review-tbl {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.review-tbl th {
+  background: var(--accent); color: #fff;
+  padding: 9px 10px; text-align: left; font-size: 11px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.review-tbl td {
+  border: 1px solid var(--border); padding: 8px 10px;
+  vertical-align: top; line-height: 1.5;
+}
+.review-tbl tr:nth-child(even) td { background: var(--surface2); }
+.review-tbl .step-cell { background: rgba(26,58,92,0.05); font-weight: 600; color: var(--accent); }
+
+/* ── Summary ── */
+.sum-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.sum-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 16px; text-align: center;
+}
+.sum-card .sn {
+  font-family: 'Space Mono', monospace; font-size: 36px; font-weight: 700;
+  color: var(--accent); display: block;
+}
+.sum-card .sl { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+/* ── Info box ── */
+.infobox {
+  background: rgba(26,58,92,0.05); border: 1px solid rgba(26,58,92,0.15);
+  border-radius: 3px; padding: 12px 16px; font-size: 12px;
+  color: var(--text-dim); line-height: 1.7; margin-bottom: 16px;
+}
+.infobox strong { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-badge">JSA</div>
+  <div class="header-main">
+    <h1>作業安全分析精靈</h1>
+    <p>Job Safety Analysis Wizard — 花68鄉道高寮大橋震災復建工程</p>
+  </div>
+</header>
+
+<div class="progress-wrap" id="progressWrap">
+  <div class="prog-step active" id="ps0"><div class="prog-num">1</div>基本資料</div>
+  <div class="prog-step" id="ps1"><div class="prog-num">2</div>作業拆解</div>
+  <div class="prog-step" id="ps2"><div class="prog-num">3</div>危害辨識</div>
+  <div class="prog-step" id="ps3"><div class="prog-num">4</div>風險評估</div>
+  <div class="prog-step" id="ps4"><div class="prog-num">5</div>對策建議</div>
+  <div class="prog-step" id="ps5"><div class="prog-num">6</div>審查輸出</div>
+</div>
+
+<main>
+
+<!-- ══ STEP 0 基本資料 ══ -->
+<div class="step-panel active" id="step0">
+  <div class="step-hd">
+    <div class="step-hd-num">01</div>
+    <div class="step-hd-text">
+      <h2>基本資料</h2>
+      <p>填寫本次 JSA 的工程基本資訊</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head">工程資訊 <span class="ch-tag">BASIC INFO</span></div>
+    <div class="card-body">
+      <div class="row mb">
+        <div><label>工程名稱 *</label><input type="text" id="jobName" value="花68鄉道高寮大橋0918震災復建工程"></div>
+        <div><label>分項工程 *</label>
+          <select id="jobSection">
+            <option value="">— 請選擇 —</option>
+            <option>壹、假設工程</option>
+            <option>貳、拆除工程</option>
+            <option>參、排水工程</option>
+            <option>肆、擋土牆工程</option>
+            <option>伍、橋梁工程</option>
+            <option>陸、道路工程</option>
+          </select>
+        </div>
+      </div>
+      <div class="row mb">
+        <div><label>作業名稱 *</label><input type="text" id="jobTitle" placeholder="例：全套管基樁工程"></div>
+        <div><label>作業地點</label><input type="text" id="jobLocation" placeholder="例：P1橋台位置"></div>
+      </div>
+      <div class="row mb">
+        <div><label>分析日期</label><input type="text" id="jobDate"></div>
+        <div><label>分析人員</label><input type="text" id="jobAnalyst" placeholder="姓名/職稱"></div>
+      </div>
+      <div class="row">
+        <div><label>作業人數</label><input type="text" id="jobWorkers" placeholder="例：5人"></div>
+        <div><label>施工期間</label><input type="text" id="jobDuration" placeholder="例：2025/06/01 ~ 2025/06/30"></div>
+      </div>
+    </div>
+  </div>
+  <div class="action-row">
+    <div></div>
+    <button class="btn btn-primary" onclick="goStep(1)">下一步：作業拆解 →</button>
+  </div>
+</div>
+
+<!-- ══ STEP 1 作業拆解 ══ -->
+<div class="step-panel" id="step1">
+  <div class="step-hd">
+    <div class="step-hd-num">02</div>
+    <div class="step-hd-text">
+      <h2>作業拆解</h2>
+      <p>依施工規劃成果選擇作業範本，或自行輸入。作業拆解至第二階作業為主，並可列出各作業內容。</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head">選擇分項工程範本 <span class="ch-tag">TEMPLATES</span></div>
+    <div class="card-body">
+      <div class="tpl-grid" id="tplGrid"></div>
+    </div>
+  </div>
+  <div class="divider">確認或修改下方步驟</div>
+  <div class="card">
+    <div class="card-head">作業拆解清單 <span class="ch-tag">WORK BREAKDOWN</span></div>
+    <div class="card-body">
+      <div id="stepsList"></div>
+      <button class="btn-add" onclick="addStep()">＋ 新增第一階作業</button>
+    </div>
+  </div>
+  <div class="action-row">
+    <button class="btn btn-ghost" onclick="goStep(0)">← 上一步</button>
+    <button class="btn btn-primary" onclick="goStep(2)">下一步：危害辨識 →</button>
+  </div>
+</div>
+
+<!-- ══ STEP 2 危害辨識 ══ -->
+<div class="step-panel" id="step2">
+  <div class="step-hd">
+    <div class="step-hd-num">03</div>
+    <div class="step-hd-text">
+      <h2>危害辨識</h2>
+      <p>針對每個第一階作業，辨識潛在危害因子及可能引致之災害型態</p>
+    </div>
+  </div>
+  <div class="infobox">
+    <strong>常見危害類型：</strong>墜落、感電、物體飛落、夾捲、切割割傷、火災爆炸、化學品暴露、搬運傷害、溺水、倒塌崩塌、交通事故、熱危害、噪音振動
+  </div>
+  <div id="hazardsList"></div>
+  <div class="action-row">
+    <button class="btn btn-ghost" onclick="goStep(1)">← 上一步</button>
+    <button class="btn btn-primary" onclick="goStep(3)">下一步：風險評估 →</button>
+  </div>
+</div>
+
+<!-- ══ STEP 3 風險評估 ══ -->
+<div class="step-panel" id="step3">
+  <div class="step-hd">
+    <div class="step-hd-num">04</div>
+    <div class="step-hd-text">
+      <h2>風險評估</h2>
+      <p>評估每個危害的可能性（L）與嚴重度（S），計算風險值 R = L × S</p>
+    </div>
+  </div>
+  <div class="infobox">
+    <strong>風險等級：</strong>1–4 低風險（可接受）　5–9 中風險（需監控）　10–16 高風險（需改善）　20–25 極高風險（立即停工）
+  </div>
+  <div id="riskList"></div>
+  <div class="action-row">
+    <button class="btn btn-ghost" onclick="goStep(2)">← 上一步</button>
+    <button class="btn btn-primary" onclick="goStep(4)">下一步：對策建議 →</button>
+  </div>
+</div>
+
+<!-- ══ STEP 4 對策建議 ══ -->
+<div class="step-panel" id="step4">
+  <div class="step-hd">
+    <div class="step-hd-num">05</div>
+    <div class="step-hd-text">
+      <h2>對策建議</h2>
+      <p>依風險等級由高至低，提出預防對策及安全防護措施（優先消除 → 取代 → 工程控制 → 行政管理 → PPE）</p>
+    </div>
+  </div>
+  <div id="controlsList"></div>
+  <div class="action-row">
+    <button class="btn btn-ghost" onclick="goStep(3)">← 上一步</button>
+    <button class="btn btn-primary" onclick="goStep(5)">下一步：審查與輸出 →</button>
+  </div>
+</div>
+
+<!-- ══ STEP 5 審查輸出 ══ -->
+<div class="step-panel" id="step5">
+  <div class="step-hd">
+    <div class="step-hd-num">06</div>
+    <div class="step-hd-text">
+      <h2>審查與輸出</h2>
+      <p>確認 JSA 內容完整後，下載 Excel 報告</p>
+    </div>
+  </div>
+  <div class="sum-grid" id="sumGrid"></div>
+  <div class="card">
+    <div class="card-head">JSA 完整預覽 <span class="ch-tag">REVIEW</span></div>
+    <div class="card-body" style="overflow-x:auto; padding:0">
+      <table class="review-tbl" id="reviewTable"></table>
+    </div>
+  </div>
+  <div class="action-row">
+    <button class="btn btn-ghost" onclick="goStep(4)">← 上一步</button>
+    <button class="btn btn-success" onclick="exportExcel()">⬇ 下載 Excel 報告</button>
+  </div>
+</div>
+
+</main>
+
+<script>
+// ══════════════════════════════════════════════
+// TEMPLATES — based on PDF work breakdown
+// ══════════════════════════════════════════════
+const TEMPLATES = {
+  'A': {
+    name: '假設工程', icon: '🚧', section: '壹、假設工程',
+    steps: [
+      { name: '整地工程', subs: ['測量人員於道路上及工區進行量測及定位放樣'] },
+      { name: '施工圍籬', subs: ['圍籬施作', '伸縮式剪刀門設置'] },
+      { name: '交維設施作業', subs: ['紐澤西護欄及型鋼護欄吊放', '交通錐及連桿設置'] },
+    ]
+  },
+  'B': {
+    name: '拆除工程', icon: '🔨', section: '貳、拆除工程',
+    steps: [
+      { name: '舊橋拆除', subs: ['動線規劃及作業範圍警示', '機具進場及整地', '混凝土打除', '廢棄物清運'] },
+      { name: '混凝土塊破碎', subs: ['動線規劃及作業範圍警示', '廢棄物進場撒鋪', '混凝土破碎'] },
+    ]
+  },
+  'C': {
+    name: '排水工程', icon: '💧', section: '參、排水工程',
+    steps: [
+      { name: '水溝開挖', subs: ['機具材料進場', '水溝測量放樣', '水溝開挖', '溝底PC澆置'] },
+      { name: '鋼筋組立', subs: ['鋼筋裁切加工', '鋼筋吊運', '鋼筋組立及綁紮'] },
+      { name: '模板組立', subs: ['模板進場吊運', '模板組立'] },
+      { name: '混凝土澆置', subs: ['混凝土車動線規劃及作業範圍警示', '混凝土車進場', '混凝土澆置、震動導實及抹平', '養護'] },
+      { name: '支撐及模板拆卸', subs: ['支撐及模板拆除', '吊掛裝車', '搬運至下一單元'] },
+      { name: '結構回填', subs: ['土方載運', '土方回填'] },
+    ]
+  },
+  'D': {
+    name: '擋土牆工程', icon: '🧱', section: '肆、擋土牆工程',
+    steps: [
+      { name: '擋土牆開挖', subs: ['機具材料進場', '測量放樣', '開挖', '牆底PC澆置'] },
+      { name: '施工架組立', subs: ['施工架材料吊運', '(1~3層)施工架搭設', '打設橫向支撐', '(4~6層)施工架搭設'] },
+      { name: '鋼筋組立', subs: ['鋼筋裁切加工', '鋼筋吊運', '鋼筋組立及綁紮'] },
+      { name: '模板組立', subs: ['模板進場吊運', '模板及支撐組立'] },
+      { name: '混凝土澆置', subs: ['混凝土車動線規劃及作業範圍警示', '混凝土車進場', '混凝土澆置、震動導實及抹平', '養護'] },
+      { name: '支撐及模板拆卸', subs: ['支撐及模板拆除', '吊掛裝車', '搬運至下一單元'] },
+      { name: '施工架拆除', subs: ['(4~6層)施工架拆除', '拆除橫向支撐', '(1~3層)施工架拆除', '吊掛裝車搬運至下一單元'] },
+      { name: '結構回填', subs: ['土方載運', '土方回填'] },
+    ]
+  },
+  'E1': {
+    name: '全套管基樁', icon: '🔩', section: '伍、橋梁工程',
+    steps: [
+      { name: '準備工作', subs: ['機具材料進場', '測量放樣'] },
+      { name: '基樁鑽掘', subs: ['搖管機設置', '套管吊放', '鑽掘作業', '樁孔底部處理', '超音波檢測垂直度'] },
+      { name: '吊放鋼筋籠', subs: ['鋼筋籠製作', '套管吊放', '鋼筋籠搭接'] },
+      { name: '混凝土澆置', subs: ['動線規劃及作業範圍警示', '混凝土車進場', '混凝土澆置', '拔除套管'] },
+    ]
+  },
+  'E2': {
+    name: '擋土開挖工程', icon: '⛏️', section: '伍、橋梁工程',
+    steps: [
+      { name: '準備工作', subs: ['機具材料進場', '測量放樣'] },
+      { name: '鋼板樁打設', subs: ['動線規劃及作業範圍警示', '拖板車載運板樁', '鋼板樁打設'] },
+      { name: '階段開挖', subs: ['挖土機進行露天開挖作業', '土車餘方近運'] },
+      { name: '假設工程', subs: ['上下設備組立', '抽水設備組裝'] },
+      { name: '架設擋土支撐及橫檔', subs: ['吊車吊放型鋼材', '型鋼材安裝鎖固'] },
+      { name: '開挖至預定深度並打設PC層', subs: ['開挖至最底層', 'PC層打設'] },
+      { name: '土方回填', subs: ['人員、機具及材料進場', '抽水設備拆除', '土方回填、夯實'] },
+      { name: '拆除擋土支撐', subs: ['人員機具進場', '水平支撐拆卸', '上下設備拆卸'] },
+      { name: '拔除鋼板樁', subs: ['鋼板樁拔除', '拖板車載運板樁', '場地整理'] },
+    ]
+  },
+  'E3': {
+    name: '墩柱及基礎工程', icon: '🏛️', section: '伍、橋梁工程',
+    steps: [
+      { name: '準備工作', subs: ['機具材料進場', '測量放樣'] },
+      { name: '鋼筋綁紮', subs: ['鋼筋裁切加工', '鋼筋吊運', '底層鋼筋綁紮', '墩柱樣架吊放', '墩柱鋼筋吊運綁紮', '基礎鋼筋組立及綁紮'] },
+      { name: '基礎模板組立', subs: ['模板吊運', '模板及支撐組立'] },
+      { name: '基礎混凝土澆置', subs: ['混凝土車動線規劃及作業範圍警示', '混凝土車進場', '混凝土澆置、震動導實及抹平', '養護'] },
+      { name: '施工架組立', subs: ['施工架及上下設備組立'] },
+      { name: '墩柱鋼筋綁紮', subs: ['鋼筋裁切加工', '主筋繫筋吊運及綁紮'] },
+      { name: '墩柱模板組立', subs: ['防撞鋼鈑動線規劃及作業範圍警示', '鋼鈑加工及上漆', '鋼鈑吊運及組立'] },
+      { name: '墩柱混凝土澆置', subs: ['混凝土車動線規劃及作業範圍警示', '混凝土車進場', '混凝土澆置、震動導實', '養護'] },
+      { name: '施工架拆卸', subs: ['施工架拆除'] },
+      { name: '基礎回填', subs: ['土方載運', '土方回填'] },
+    ]
+  },
+  'E4': {
+    name: '帽梁工程(場撐)', icon: '🏗️', section: '伍、橋梁工程',
+    steps: [
+      { name: '地坪澆置', subs: ['用地夯實', '測量放樣', 'PC地坪澆置'] },
+      { name: '支撐組立', subs: ['支撐架搭設'] },
+      { name: '人員上架設備組立', subs: ['單元組裝及吊掛', '上下設備固定', '安全護欄架設'] },
+      { name: '帽梁底模', subs: ['模板吊運及組立'] },
+      { name: '鋼筋綁紮', subs: ['鋼筋裁切加工', '鋼筋吊運及綁紮'] },
+      { name: '側模組立', subs: ['模板吊運及組立', '上帽梁頂施工架搭設', '帽梁頂安全護欄組裝'] },
+      { name: '構件預埋', subs: ['人員測量', '止震塊鋼筋、支承墊螺栓預埋'] },
+      { name: '混凝土澆置', subs: ['混凝土澆置、震動導實及抹平', '養護'] },
+      { name: '模板拆卸', subs: ['模板拆除', '安全護欄、支撐架、上下設備拆除'] },
+    ]
+  },
+  'E5': {
+    name: '鋼箱型梁橋', icon: '🌉', section: '伍、橋梁工程',
+    steps: [
+      { name: '鋼箱梁製作', subs: ['主體版、內隔板、托梁零件切割及組立', '鋼箱梁焊接', '鋼箱梁拼裝', '鋼箱梁塗裝'] },
+      { name: '鋼箱梁運輸', subs: ['鋼箱梁運輸', '鋼箱梁運輸後下放至梁場'] },
+      { name: '準備作業', subs: ['工區範圍圈設、警戒', '施工便道、場地地表清理', '土層滾壓夯實及整地'] },
+      { name: '支撐架組立', subs: ['地坪打設', '重型支撐架搬運', '重型支撐架安裝、固定'] },
+      { name: '鋼箱梁地組', subs: ['起重機吊掛作業範圍警示', '上下設備、母索欄杆及開口防護', '鋼箱梁單元吊掛及地組', '螺栓接合及現場銲接', '接合版補漆塗裝'] },
+      { name: '鋼箱梁吊運', subs: ['起重機吊掛作業範圍警示', '地組節塊吊裝及定位', '強力螺栓鎖固', '吊裝完成吊索解鎖'] },
+      { name: '鋼箱梁隔梁吊裝', subs: ['鋼隔梁吊裝上梁', '強力螺栓鎖固'] },
+      { name: '支撐架拆除', subs: ['支撐拆解及吊放', '支撐材載運至下一單元'] },
+    ]
+  },
+  'E6': {
+    name: '橋面板施工', icon: '🛤️', section: '伍、橋梁工程',
+    steps: [
+      { name: '翼板拖架組立', subs: ['拖架搬運', '高空作業車配合拖架組立', '安全網安裝', '施工護欄架設'] },
+      { name: '鋼承鈑安裝', subs: ['鋼承鈑運輸', '鋼承鈑安裝'] },
+      { name: '鋼筋綁紮', subs: ['鋼筋裁切加工', '鋼筋吊運及綁紮'] },
+      { name: '模板組立', subs: ['模板吊運', '模板組立'] },
+      { name: '混凝土澆置', subs: ['預埋安全插銷、護欄鋼筋、燈座構件', '混凝土澆置', '養護'] },
+      { name: '拖架拆除', subs: ['拖架拆解及吊放', '載運至下一單元'] },
+      { name: '護欄燈座基礎施工', subs: ['地面固定插銷施作', '護欄、燈座鋼筋綁紮', '模板組立、構件預埋', '混凝土澆置', '鋼管護欄組立'] },
+    ]
+  },
+  'F': {
+    name: '道路工程', icon: '🛣️', section: '陸、道路工程',
+    steps: [
+      { name: '準備作業', subs: ['動線規劃及作業範圍警示', '整地機具進場', '路工場地清除與掘除'] },
+      { name: '挖方作業', subs: ['測量作業', '土方開挖', '土放暫置及搬運'] },
+      { name: '路基填築', subs: ['測量作業', '土方搬運', '土方回填夯實'] },
+      { name: '地下管線埋設', subs: ['測量作業', '作業範圍警示', '人手孔吊運及安裝', '管線吊運及埋設', 'CLSM回填'] },
+      { name: '級配填築', subs: ['測量作業', '材料運送', '級配材料回填夯實'] },
+      { name: '瀝青混凝土路面施工', subs: ['測量作業', '動線規劃及作業範圍警示', '鋪築面清理整備、黏層透層', '瀝青混凝土鋪築', '瀝青混凝土滾壓'] },
+    ]
+  },
+};
+
+const HAZARD_TYPES = ['墜落','感電','物體飛落','夾捲','切割割傷','倒塌崩塌','溺水','交通事故','火災爆炸','化學品暴露','搬運傷害','熱危害','噪音振動','其他'];
+
+// ── State ──
+const state = { job:{}, steps:[], hazards:[], risks:[], controls:[] };
+let sidCtr=0, hidCtr=0, selectedTpl=null;
+
+// ── Navigation ──
+function goStep(n) {
+  if (n===1) initStep1();
+  if (n===2) initStep2();
+  if (n===3) initStep3();
+  if (n===4) initStep4();
+  if (n===5) initStep5();
+  document.querySelectorAll('.step-panel').forEach((p,i)=>p.classList.toggle('active',i===n));
+  document.querySelectorAll('.prog-step').forEach((p,i)=>{
+    p.classList.remove('active','done');
+    if(i===n) p.classList.add('active');
+    else if(i<n) p.classList.add('done');
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── Step 0 ──
+function readJob() {
+  state.job = {
+    name: v('jobName'), section: v('jobSection'), title: v('jobTitle'),
+    location: v('jobLocation'), date: v('jobDate'), analyst: v('jobAnalyst'),
+    workers: v('jobWorkers'), duration: v('jobDuration'),
+  };
+}
+function v(id){ return document.getElementById(id)?.value||''; }
+
+// ── Step 1 ──
+function initStep1() {
+  readJob();
+  buildTplGrid();
+  if(selectedTpl) document.getElementById('tpl_'+selectedTpl)?.classList.add('selected');
+  if(state.steps.length===0) addDefaultSteps();
+  renderSteps();
+}
+
+function buildTplGrid() {
+  const el = document.getElementById('tplGrid');
+  el.innerHTML='';
+  Object.entries(TEMPLATES).forEach(([key,t])=>{
+    const d=document.createElement('div');
+    d.className='tpl-card'; d.id='tpl_'+key;
+    d.innerHTML=`<div class="ti">${t.icon}</div><div class="tn">${t.name}</div><div class="tc">${t.steps.length}個第一階作業</div>`;
+    d.onclick=()=>applyTemplate(key);
+    el.appendChild(d);
+  });
+}
+
+function applyTemplate(key) {
+  document.querySelectorAll('.tpl-card').forEach(c=>c.classList.remove('selected'));
+  document.getElementById('tpl_'+key)?.classList.add('selected');
+  selectedTpl=key;
+  const t=TEMPLATES[key];
+  state.steps=t.steps.map(s=>({id:++sidCtr, name:s.name, subs:[...s.subs]}));
+  state.hazards=[]; state.risks=[]; state.controls=[];
+  if(!v('jobTitle')) document.getElementById('jobTitle').value=t.name;
+  if(!v('jobSection')) document.getElementById('jobSection').value=t.section;
+  renderSteps();
+}
+
+function addDefaultSteps() {
+  state.steps=[{id:++sidCtr,name:'',subs:['']},{id:++sidCtr,name:'',subs:['']}];
+}
+
+function addStep() {
+  state.steps.push({id:++sidCtr,name:'',subs:['']});
+  renderSteps();
+}
+
+function removeStep(idx) {
+  if(state.steps.length<=1) return;
+  const rid=state.steps[idx].id;
+  state.steps.splice(idx,1);
+  state.hazards=state.hazards.filter(h=>h.stepId!==rid);
+  renderSteps();
+}
+
+function addSub(stepIdx) {
+  state.steps[stepIdx].subs.push('');
+  renderSteps();
+}
+
+function removeSub(stepIdx, subIdx) {
+  if(state.steps[stepIdx].subs.length<=1) return;
+  state.steps[stepIdx].subs.splice(subIdx,1);
+  renderSteps();
+}
+
+function renderSteps() {
+  const el=document.getElementById('stepsList');
+  el.innerHTML='';
+  state.steps.forEach((s,si)=>{
+    const d=document.createElement('div');
+    d.style.marginBottom='12px';
+    // first-level
+    const topRow=`
+      <div class="work-step-item">
+        <div class="wsn">${si+1}</div>
+        <div class="ws-inputs" style="flex:1">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" placeholder="第一階作業名稱..." value="${esc(s.name)}"
+              oninput="state.steps[${si}].name=this.value" style="flex:1">
+            <button class="btn-del" onclick="removeStep(${si})">✕</button>
+          </div>
+    `;
+    const subRows=s.subs.map((sb,sbi)=>`
+      <div class="ws-content-item" style="margin-left:10px;gap:6px;display:flex;align-items:center">
+        <div class="wsc-dot"></div>
+        <input type="text" placeholder="作業內容..." value="${esc(sb)}"
+          oninput="state.steps[${si}].subs[${sbi}]=this.value" style="flex:1;font-size:12px;padding:6px 10px">
+        <button style="background:transparent;border:none;color:#c42a2a;cursor:pointer;font-size:12px;padding:2px 6px" onclick="removeSub(${si},${sbi})">✕</button>
+      </div>
+    `).join('');
+    d.innerHTML=topRow+subRows+`
+          <button class="ws-add-content" onclick="addSub(${si})">＋ 新增作業內容</button>
+        </div>
+      </div>
+    `;
+    el.appendChild(d);
+  });
+}
+
+// ── Step 2 危害辨識 ──
+function initStep2() {
+  const el=document.getElementById('hazardsList');
+  el.innerHTML='';
+  state.steps.filter(s=>s.name.trim()).forEach((s,si)=>{
+    const card=document.createElement('div');
+    card.className='card';
+    card.innerHTML=`
+      <div class="card-head">
+        <span style="background:rgba(255,255,255,0.2);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-family:'Space Mono'">${si+1}</span>
+        ${s.name}
+      </div>
+      <div class="card-body">
+        <div id="hz_${s.id}"></div>
+        <button class="btn-add" onclick="addHazard(${s.id})">＋ 新增危害</button>
+      </div>
+    `;
+    el.appendChild(card);
+    const existing=state.hazards.filter(h=>h.stepId===s.id);
+    if(existing.length===0) addHazard(s.id);
+    else renderHazards(s.id);
+  });
+}
+
+function addHazard(stepId) {
+  state.hazards.push({id:++hidCtr,stepId,type:'墜落',desc:''});
+  renderHazards(stepId);
+}
+
+function removeHazard(hid) {
+  const idx=state.hazards.findIndex(h=>h.id===hid);
+  if(idx<0) return;
+  const stepId=state.hazards[idx].stepId;
+  state.risks=state.risks.filter(r=>r.hazardId!==hid);
+  state.controls=state.controls.filter(c=>c.hazardId!==hid);
+  state.hazards.splice(idx,1);
+  renderHazards(stepId);
+}
+
+function renderHazards(stepId) {
+  const el=document.getElementById('hz_'+stepId);
+  if(!el) return;
+  const list=state.hazards.filter(h=>h.stepId===stepId);
+  el.innerHTML='';
+  list.forEach((h,hi)=>{
+    const gi=state.hazards.indexOf(h);
+    const d=document.createElement('div');
+    d.className='hazard-item';
+    d.innerHTML=`
+      <div class="hi-row">
+        <span class="hi-num">危害 ${hi+1}</span>
+        <button class="btn-del" onclick="removeHazard(${h.id})">✕ 移除</button>
+      </div>
+      <div class="row">
+        <div>
+          <label>危害類型</label>
+          <select onchange="state.hazards[${gi}].type=this.value">
+            ${HAZARD_TYPES.map(t=>`<option value="${t}" ${h.type===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:2">
+          <label>危害描述（具體情境）</label>
+          <input type="text" placeholder="例：使用搖管機吊放套管時，套管脫落傷及人員..." value="${esc(h.desc)}"
+            oninput="state.hazards[${gi}].desc=this.value">
+        </div>
+      </div>
+    `;
+    el.appendChild(d);
+  });
+}
+
+// ── Step 3 風險評估 ──
+function getRisk(score) {
+  if(score>=20) return {label:'極高風險',cls:'r-critical'};
+  if(score>=10) return {label:'高風險',cls:'r-high'};
+  if(score>=5)  return {label:'中風險',cls:'r-med'};
+  return {label:'低風險',cls:'r-low'};
+}
+
+function initStep3() {
+  const el=document.getElementById('riskList');
+  el.innerHTML='';
+  state.hazards.forEach((h,hi)=>{
+    const step=state.steps.find(s=>s.id===h.stepId);
+    let r=state.risks.find(r=>r.hazardId===h.id);
+    if(!r){ r={hazardId:h.id,L:3,S:3}; state.risks.push(r); }
+    const ri=state.risks.indexOf(r);
+    const score=r.L*r.S; const info=getRisk(score);
+    const card=document.createElement('div');
+    card.className='card';
+    card.innerHTML=`
+      <div class="card-head">
+        <span style="font-size:10px;opacity:0.7">${step?step.name:''} ›</span>
+        <span style="margin-left:6px">${h.type}：${h.desc||'（未填）'}</span>
+      </div>
+      <div class="card-body">
+        <div class="row mb">
+          <div>
+            <label>可能性 L（1＝極少，5＝幾乎確定）</label>
+            <select onchange="updateRisk(${ri},'L',this.value)">
+              <option value="1" ${r.L==1?'selected':''}>1 — 極少發生</option>
+              <option value="2" ${r.L==2?'selected':''}>2 — 偶爾發生</option>
+              <option value="3" ${r.L==3?'selected':''}>3 — 有時發生</option>
+              <option value="4" ${r.L==4?'selected':''}>4 — 經常發生</option>
+              <option value="5" ${r.L==5?'selected':''}>5 — 幾乎確定</option>
+            </select>
+          </div>
+          <div>
+            <label>嚴重度 S（1＝輕微，5＝死亡）</label>
+            <select onchange="updateRisk(${ri},'S',this.value)">
+              <option value="1" ${r.S==1?'selected':''}>1 — 輕微（急救）</option>
+              <option value="2" ${r.S==2?'selected':''}>2 — 輕傷（可恢復）</option>
+              <option value="3" ${r.S==3?'selected':''}>3 — 中傷（需就醫）</option>
+              <option value="4" ${r.S==4?'selected':''}>4 — 重傷（永久傷害）</option>
+              <option value="5" ${r.S==5?'selected':''}>5 — 死亡或多人傷亡</option>
+            </select>
+          </div>
+        </div>
+        <div class="risk-calc" id="rc_${h.id}">
+          <span class="risk-score-big">${score}</span>
+          <span class="risk-pill ${info.cls}">${info.label}</span>
+          <span style="font-size:12px;color:var(--text-dimmer)">L ${r.L} × S ${r.S}</span>
+        </div>
+      </div>
+    `;
+    el.appendChild(card);
+  });
+}
+
+function updateRisk(ri,field,val) {
+  state.risks[ri][field]=parseInt(val);
+  const hid=state.risks[ri].hazardId;
+  const r=state.risks[ri];
+  const score=r.L*r.S; const info=getRisk(score);
+  const el=document.getElementById('rc_'+hid);
+  if(el) el.innerHTML=`
+    <span class="risk-score-big" style="color:${score>=10?'var(--danger)':score>=5?'var(--accent2)':'var(--success)'}">${score}</span>
+    <span class="risk-pill ${info.cls}">${info.label}</span>
+    <span style="font-size:12px;color:var(--text-dimmer)">L ${r.L} × S ${r.S}</span>
+  `;
+}
+
+// ── Step 4 對策建議 ──
+function initStep4() {
+  const el=document.getElementById('controlsList');
+  el.innerHTML='';
+  const sorted=[...state.hazards].sort((a,b)=>{
+    const ra=state.risks.find(r=>r.hazardId===a.id)||{L:0,S:0};
+    const rb=state.risks.find(r=>r.hazardId===b.id)||{L:0,S:0};
+    return rb.L*rb.S - ra.L*ra.S;
+  });
+  sorted.forEach(h=>{
+    const step=state.steps.find(s=>s.id===h.stepId);
+    const risk=state.risks.find(r=>r.hazardId===h.id)||{L:0,S:0};
+    const score=risk.L*risk.S; const info=getRisk(score);
+    let c=state.controls.find(c=>c.hazardId===h.id);
+    if(!c){ c={hazardId:h.id,engineering:'',admin:'',ppe:''}; state.controls.push(c); }
+    const ci=state.controls.indexOf(c);
+    const card=document.createElement('div');
+    card.className='card';
+    card.innerHTML=`
+      <div class="card-head" style="justify-content:space-between">
+        <span><span style="font-size:10px;opacity:0.6">${step?step.name:''} › </span>${h.type}：${h.desc||'（未填）'}</span>
+        <span class="risk-pill ${info.cls}">${info.label} (${score})</span>
+      </div>
+      <div class="card-body">
+        <div class="mb">
+          <label>🔧 工程控制措施</label>
+          <textarea placeholder="例：安裝防墜網、設置護欄、鋼板樁支護..." oninput="state.controls[${ci}].engineering=this.value">${c.engineering}</textarea>
+        </div>
+        <div class="mb">
+          <label>📋 行政管理措施</label>
+          <textarea placeholder="例：吊掛作業許可制度、作業前工具箱會議、專人指揮..." oninput="state.controls[${ci}].admin=this.value">${c.admin}</textarea>
+        </div>
+        <div>
+          <label>🦺 個人防護具（PPE）</label>
+          <textarea placeholder="例：安全帽、安全帶、絕緣手套、防護眼鏡..." oninput="state.controls[${ci}].ppe=this.value">${c.ppe}</textarea>
+        </div>
+      </div>
+    `;
+    el.appendChild(card);
+  });
+}
+
+// ── Step 5 審查輸出 ──
+function initStep5() {
+  const steps=state.steps.filter(s=>s.name.trim()).length;
+  const haz=state.hazards.length;
+  const high=state.risks.filter(r=>r.L*r.S>=10).length;
+  const crit=state.risks.filter(r=>r.L*r.S>=20).length;
+  document.getElementById('sumGrid').innerHTML=`
+    <div class="sum-card"><span class="sn">${steps}</span><span class="sl">第一階作業數</span></div>
+    <div class="sum-card"><span class="sn">${haz}</span><span class="sl">辨識危害數</span></div>
+    <div class="sum-card"><span class="sn" style="color:var(--danger)">${high}</span><span class="sl">高/極高風險</span></div>
+    <div class="sum-card"><span class="sn" style="color:#c42a2a">${crit}</span><span class="sl">極高風險（立即停工）</span></div>
+  `;
+  const tbl=document.getElementById('reviewTable');
+  tbl.innerHTML=`
+    <thead><tr>
+      <th style="width:4%">步驟</th>
+      <th style="width:14%">第一階作業</th>
+      <th style="width:8%">危害類型</th>
+      <th style="width:20%">危害描述</th>
+      <th style="width:5%">L</th>
+      <th style="width:5%">S</th>
+      <th style="width:5%">R</th>
+      <th style="width:8%">風險等級</th>
+      <th style="width:13%">工程控制</th>
+      <th style="width:13%">行政管理</th>
+      <th style="width:10%">PPE</th>
+    </tr></thead>
+    <tbody id="rBody"></tbody>
+  `;
+  const tbody=document.getElementById('rBody');
+  state.steps.filter(s=>s.name.trim()).forEach((s,si)=>{
+    const hzs=state.hazards.filter(h=>h.stepId===s.id);
+    if(!hzs.length){
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="step-cell">${si+1}</td><td class="step-cell">${s.name}</td><td colspan="9" style="color:var(--text-dimmer);text-align:center">無危害記錄</td>`;
+      tbody.appendChild(tr);
+      return;
+    }
+    hzs.forEach((h,hi)=>{
+      const r=state.risks.find(r=>r.hazardId===h.id)||{L:'',S:''};
+      const c=state.controls.find(c=>c.hazardId===h.id)||{};
+      const score=(r.L&&r.S)?r.L*r.S:'';
+      const info=score?getRisk(score):{label:'',cls:''};
+      const tr=document.createElement('tr');
+      tr.innerHTML=`
+        <td class="step-cell">${hi===0?si+1:''}</td>
+        <td class="step-cell">${hi===0?s.name:''}</td>
+        <td>${h.type}</td><td>${h.desc}</td>
+        <td style="text-align:center">${r.L}</td>
+        <td style="text-align:center">${r.S}</td>
+        <td style="text-align:center;font-weight:700">${score}</td>
+        <td><span class="risk-pill ${info.cls}">${info.label}</span></td>
+        <td>${c.engineering||''}</td>
+        <td>${c.admin||''}</td>
+        <td>${c.ppe||''}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+// ── Excel Export ──
+function exportExcel() {
+  const wb=XLSX.utils.book_new();
+  // Sheet 1: 封面
+  const cover=[
+    ['施工規劃階段施工風險評估報告'],
+    [],
+    ['工程名稱', state.job.name],
+    ['分項工程', state.job.section],
+    ['作業名稱', state.job.title],
+    ['作業地點', state.job.location],
+    ['分析日期', state.job.date],
+    ['分析人員', state.job.analyst],
+    ['作業人數', state.job.workers],
+    ['施工期間', state.job.duration],
+    [],
+    ['統計摘要'],
+    ['第一階作業數', state.steps.filter(s=>s.name.trim()).length],
+    ['辨識危害數', state.hazards.length],
+    ['高/極高風險項目', state.risks.filter(r=>r.L*r.S>=10).length],
+    ['極高風險（立即停工）', state.risks.filter(r=>r.L*r.S>=20).length],
+  ];
+  const ws0=XLSX.utils.aoa_to_sheet(cover);
+  ws0['!cols']=[{wch:20},{wch:50}];
+  XLSX.utils.book_append_sheet(wb,ws0,'封面');
+
+  // Sheet 2: JSA主表（含作業內容）
+  const headers=['步驟#','第一階作業','作業內容','危害類型','危害描述','可能性L','嚴重度S','風險值R','風險等級','工程控制措施','行政管理措施','個人防護具PPE'];
+  const rows=[headers];
+  state.steps.filter(s=>s.name.trim()).forEach((s,si)=>{
+    const hzs=state.hazards.filter(h=>h.stepId===s.id);
+    const subStr=s.subs.filter(x=>x.trim()).join('\n');
+    if(!hzs.length){
+      rows.push([si+1,s.name,subStr,'','','','','','','','','']);
+      return;
+    }
+    hzs.forEach((h,hi)=>{
+      const r=state.risks.find(r=>r.hazardId===h.id)||{L:'',S:''};
+      const c=state.controls.find(c=>c.hazardId===h.id)||{};
+      const score=(r.L&&r.S)?r.L*r.S:'';
+      const level=score?getRisk(score).label:'';
+      rows.push([
+        hi===0?si+1:'', hi===0?s.name:'', hi===0?subStr:'',
+        h.type, h.desc, r.L, r.S, score, level,
+        c.engineering||'', c.admin||'', c.ppe||''
+      ]);
+    });
+  });
+  const ws1=XLSX.utils.aoa_to_sheet(rows);
+  ws1['!cols']=[{wch:6},{wch:18},{wch:30},{wch:10},{wch:28},{wch:8},{wch:8},{wch:6},{wch:10},{wch:28},{wch:28},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws1,'JSA主表');
+
+  // Sheet 3: 高風險彙整
+  const hrows=[['步驟','第一階作業','危害類型','危害描述','L','S','R','風險等級','工程控制','行政管理','PPE']];
+  state.risks.filter(r=>r.L*r.S>=10).sort((a,b)=>b.L*b.S-a.L*a.S).forEach(r=>{
+    const h=state.hazards.find(h=>h.id===r.hazardId);
+    const s=h?state.steps.find(s=>s.id===h.stepId):null;
+    const c=h?state.controls.find(c=>c.hazardId===h.id):null;
+    const score=r.L*r.S;
+    hrows.push([s?s.name:'',s?s.name:'',h?h.type:'',h?h.desc:'',r.L,r.S,score,getRisk(score).label,c?c.engineering:'',c?c.admin:'',c?c.ppe:'']);
+  });
+  const ws2=XLSX.utils.aoa_to_sheet(hrows);
+  ws2['!cols']=[{wch:6},{wch:18},{wch:10},{wch:28},{wch:6},{wch:6},{wch:6},{wch:10},{wch:28},{wch:28},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws2,'高風險彙整');
+
+  const fname=`JSA_${state.job.name||'未命名'}_${state.job.title||''}_${state.job.date||new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb,fname);
+}
+
+// ── Helpers ──
+function esc(s){ return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+document.getElementById('jobDate').value=new Date().toISOString().slice(0,10);
+</script>
+</body>
+</html>
